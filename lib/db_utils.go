@@ -1372,7 +1372,7 @@ func DBGetMessageEntriesForPublicKey(handle *badger.DB, publicKey []byte) (
 
 func _enumerateLimitedMessagesForMessagingKeysReversedWithTxn(
 	txn *badger.Txn, messagingGroupEntries []*MessagingGroupEntry,
-	limit uint64) (_privateMessages []*MessageEntry, _err error) {
+	timestampKeyset uint64, limit uint64) (_privateMessages []*MessageEntry, _err error) {
 
 	// Users can have many messaging keys. By default, a users has the base messaging key, which
 	// is just their main public key. Users can also register messaging keys, e.g. keys like the
@@ -1389,13 +1389,13 @@ func _enumerateLimitedMessagesForMessagingKeysReversedWithTxn(
 		//prefixes = append(prefixes, _dbSeekPrefixForMessagePartyPublicKey(keyEntry.MessagingPublicKey[:]))
 	}
 
-	// Initialize all iterators, add the 0xff byte to the seek prefix so that we can iterate backwards.
+	// Initialize all iterators, add timestampKeyset bytes to the seek prefix so that we can iterate backwards.
 	var messagingIterators []*badger.Iterator
 	for _, prefix := range prefixes {
 		opts := badger.DefaultIteratorOptions
 		opts.Reverse = true
 		iterator := txn.NewIterator(opts)
-		iterator.Seek(append(prefix, 0xff))
+		iterator.Seek(append(prefix, UintToBuf(timestampKeyset)...))
 		defer iterator.Close()
 		messagingIterators = append(messagingIterators, iterator)
 	}
@@ -1454,7 +1454,7 @@ func _enumerateLimitedMessagesForMessagingKeysReversedWithTxn(
 	return privateMessages, nil
 }
 
-func DBGetLimitedMessageForMessagingKeys(handle *badger.DB, messagingKeys []*MessagingGroupEntry, limit uint64) (
+func DBGetLimitedMessageForMessagingKeys(handle *badger.DB, messagingKeys []*MessagingGroupEntry, timestampKeyset uint64, limit uint64) (
 	_privateMessages []*MessageEntry, _err error) {
 
 	// Setting the prefix to a tstamp of zero should return all the messages
@@ -1467,7 +1467,7 @@ func DBGetLimitedMessageForMessagingKeys(handle *badger.DB, messagingKeys []*Mes
 
 	err := handle.Update(func(txn *badger.Txn) error {
 		var err error
-		_privateMessages, err = _enumerateLimitedMessagesForMessagingKeysReversedWithTxn(txn, messagingKeys, limit)
+		_privateMessages, err = _enumerateLimitedMessagesForMessagingKeysReversedWithTxn(txn, messagingKeys, timestampKeyset, limit)
 		if err != nil {
 			return errors.Wrapf(err, "DBGetLimitedMessageForMessagingKeys: problem getting user messages")
 		}
